@@ -8,6 +8,14 @@ Developed as part of the *Introduction to Data Processing* course at Polytech Ni
 
 The dataset combines listings from seven car brands: Audi, BMW, Ford, Hyundai, Skoda, Toyota, and Volkswagen.
 
+## Technologies Used
+
+- **Language:** Python
+- **Data manipulation:** Pandas, NumPy
+- **Data visualization:** Matplotlib, Seaborn
+- **Machine Learning:** Scikit-learn
+- **Methods:** Data preprocessing, feature engineering, multiple linear regression, cross-validation
+
 ## Objectives
 
 - Explore and understand real-world vehicle data.
