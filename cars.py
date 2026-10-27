@@ -1,0 +1,315 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import seaborn as sns
+from itertools import combinations
+from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error, mean_absolute_error
+
+sns.set_style("whitegrid")
+sns.set_palette("Set2")
+
+voitures = pd.read_csv(r"cars_dataset.csv")
+voitures = voitures.rename(columns={
+    'mileage': 'kilometrage',
+    'year': 'annee',
+    'transmission': 'transmission',
+    'fuelType': 'type_carburant',
+    'price': 'prix',
+    'Make': 'marque',
+    'model': 'modele',
+    'engineSize': 'cylindree',
+    'tax': 'taxe',
+})
+
+if 'Unnamed: 0' in voitures.columns:
+    voitures = voitures.drop(columns='Unnamed: 0')
+
+voitures['age'] = 2026 - voitures['annee']
+voitures = voitures.drop(columns='annee')
+
+print(voitures.head())
+print(voitures.shape)
+print(voitures.info())
+print(voitures.describe().T)
+print(voitures.isnull().sum())
+
+for colonne in voitures.columns:
+    print(colonne, ':', voitures[colonne].nunique())
+
+print(voitures.age.value_counts().sort_index())
+
+voitures = voitures[voitures.age.between(0, 40)]
+voitures = voitures.drop_duplicates()
+print("Lignes dupliquées restantes :", voitures.duplicated().sum())
+
+print(voitures.transmission.value_counts())
+print(voitures.type_carburant.value_counts())
+
+voitures['type_carburant'] = voitures['type_carburant'].replace('Electric', 'Other')
+print(voitures.type_carburant.value_counts())
+print("Dimensions après nettoyage :", voitures.shape)
+
+for colonne in voitures.columns:
+    if pd.api.types.is_numeric_dtype(voitures[colonne]):
+        voitures[colonne] = voitures[colonne].fillna(
+            voitures[colonne].median()
+        )
+    else:
+        mode = voitures[colonne].mode()
+        if not mode.empty:
+            voitures[colonne] = voitures[colonne].fillna(mode.iloc[0])
+
+print("Valeurs manquantes après traitement :",
+      voitures.isnull().sum().sum())
+
+
+variables_categorielles = list(voitures.select_dtypes(include="object").columns)
+variables_numeriques = list(voitures.select_dtypes(include=["int64", "float64"]).columns)
+print("Variables catégorielles :", variables_categorielles)
+print("Variables numériques :", variables_numeriques)
+
+voitures_num = voitures[variables_numeriques]
+
+prix_moyen_transmission = voitures.groupby('transmission')['prix'].mean().sort_values(ascending=False).round(2)
+print("\nPrix moyen par transmission :")
+print(prix_moyen_transmission)
+
+prix_moyen_carburant = voitures.groupby('type_carburant')['prix'].mean().sort_values(ascending=False).round(2)
+print("\nPrix moyen par type de carburant :")
+print(prix_moyen_carburant)
+
+correlation = voitures_num.corr()
+print("\nMatrice de corrélation :")
+print(correlation)
+
+masque = np.triu(np.ones_like(correlation, dtype=bool))
+plt.figure(figsize=(10, 7))
+sns.heatmap(correlation, mask=masque, annot=True, cmap='coolwarm', fmt='.2f')
+plt.title("Matrice de corrélation", fontsize=14)
+plt.tight_layout()
+plt.show()
+
+correlation_avec_prix = correlation['prix'].drop('prix').sort_values(ascending=False)
+print("\nCorrélation avec le prix :")
+print(correlation_avec_prix)
+
+sns.pairplot(voitures_num, corner=True, diag_kind='hist',
+             plot_kws={'alpha': 0.5, 'color': 'royalblue'},
+             diag_kws={'color': 'darkorange'})
+plt.show()
+
+plt.figure(figsize=(8, 5))
+sns.histplot(x="age", data=voitures.query("age < 21"), bins=20,
+             color='seagreen', edgecolor='black')
+plt.title("Répartition de l'âge des véhicules", fontsize=14)
+plt.xlabel("Âge (années)")
+plt.ylabel("Nombre de véhicules")
+plt.show()
+
+
+def tracer_categories(donnees):
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig.suptitle("Répartition des véhicules par catégorie", fontsize=16, fontweight='bold')
+
+    sns.countplot(ax=axes[0], x="marque", data=donnees, palette="tab10")
+    axes[0].set_title("Marque")
+    axes[0].set_xlabel("Marque")
+    axes[0].set_ylabel("Nombre de véhicules")
+    axes[0].tick_params(axis='x', rotation=45)
+
+    sns.countplot(ax=axes[1], x="type_carburant", data=donnees, palette="Set2")
+    axes[1].set_title("Type de carburant")
+    axes[1].set_xlabel("Type de carburant")
+    axes[1].set_ylabel("Nombre de véhicules")
+    axes[1].tick_params(axis='x', rotation=45)
+
+    sns.countplot(ax=axes[2], x="transmission", data=donnees, palette="Set3")
+    axes[2].set_title("Transmission")
+    axes[2].set_xlabel("Transmission")
+    axes[2].set_ylabel("Nombre de véhicules")
+    axes[2].tick_params(axis='x', rotation=45)
+
+    plt.tight_layout()
+    plt.show()
+
+
+tracer_categories(voitures)
+
+plt.figure(figsize=(20, 14))
+plt.suptitle("Prix selon les variables catégorielles", fontsize=16)
+
+plt.subplot(2, 2, 1)
+sns.boxplot(x='transmission', y='prix', data=voitures, palette='Set2')
+plt.title("Prix selon la transmission")
+plt.xlabel("Transmission")
+plt.ylabel("Prix")
+
+plt.subplot(2, 2, 2)
+sns.boxplot(x='type_carburant', y='prix', data=voitures, palette='Set3')
+plt.title("Prix selon le type de carburant")
+plt.xlabel("Type de carburant")
+plt.ylabel("Prix")
+
+plt.subplot(2, 2, 3)
+sns.boxplot(x='marque', y='prix', data=voitures, palette='tab10')
+plt.title("Prix selon la marque")
+plt.xlabel("Marque")
+plt.ylabel("Prix")
+
+plt.tight_layout()
+plt.show()
+
+fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+sns.kdeplot(ax=ax[0], x='prix', hue='transmission', data=voitures, fill=True, alpha=0.5)
+ax[0].set_title("Distribution du prix selon la transmission")
+ax[0].set_xlabel("Prix")
+ax[0].set_ylabel("Densité")
+
+sns.kdeplot(ax=ax[1], x='prix', hue='type_carburant', data=voitures, fill=True, alpha=0.5)
+ax[1].set_title("Distribution du prix selon le type de carburant")
+ax[1].set_xlabel("Prix")
+ax[1].set_ylabel("Densité")
+fig.tight_layout(pad=1)
+plt.show()
+
+variables_exploration = ['age', 'kilometrage', 'cylindree', 'mpg']
+variables_exploration = [v for v in variables_exploration if v in voitures.columns]
+
+donnees_plot = voitures.sample(2000, random_state=42) if len(voitures) > 2000 else voitures
+
+
+def limites(serie, bas=0.01, haut=0.99):
+    return serie.quantile(bas), serie.quantile(haut)
+
+
+pas = 250
+prix_bas = np.floor(voitures['prix'].quantile(0.10) / pas) * pas
+prix_haut = np.ceil(voitures['prix'].quantile(0.90) / pas) * pas
+bornes_prix = np.arange(prix_bas, prix_haut + pas, pas)
+norme_prix = mcolors.BoundaryNorm(bornes_prix, ncolors=256)
+ticks_prix = bornes_prix[::4]
+
+for v1, v2 in combinations(variables_exploration, 2):
+    plt.figure(figsize=(8, 6))
+    nuage = plt.scatter(donnees_plot[v1], donnees_plot[v2], c=donnees_plot['prix'],
+                        cmap='turbo', norm=norme_prix, s=15, alpha=0.6)
+    plt.colorbar(nuage, label="Prix (€)", extend='both', ticks=ticks_prix)
+    plt.xlim(*limites(donnees_plot[v1]))
+    plt.ylim(*limites(donnees_plot[v2]))
+    plt.locator_params(axis='x', nbins=12)
+    plt.locator_params(axis='y', nbins=12)
+    plt.grid(True, alpha=0.3)
+    plt.xlabel(v1)
+    plt.ylabel(v2)
+    plt.title(f"Prix selon {v1} et {v2}", fontsize=14)
+    plt.tight_layout()
+    plt.show()
+
+for v1, v2, v3 in combinations(variables_exploration, 3):
+    fig = plt.figure(figsize=(9, 7))
+    ax = fig.add_subplot(111, projection='3d')
+    nuage = ax.scatter(donnees_plot[v1], donnees_plot[v2], donnees_plot[v3],
+                       c=donnees_plot['prix'], cmap='turbo', norm=norme_prix, s=12, alpha=0.6)
+    fig.colorbar(nuage, label="Prix (€)", shrink=0.6, extend='both', ticks=ticks_prix)
+    ax.set_xlim(*limites(donnees_plot[v1]))
+    ax.set_ylim(*limites(donnees_plot[v2]))
+    ax.set_zlim(*limites(donnees_plot[v3]))
+    ax.locator_params(nbins=8)
+    ax.set_xlabel(v1)
+    ax.set_ylabel(v2)
+    ax.set_zlabel(v3)
+    ax.set_title(f"Prix selon {v1}, {v2} et {v3}", fontsize=13)
+    plt.tight_layout()
+    plt.show()
+
+for caracteristique in ['age', 'kilometrage', 'cylindree', 'mpg']:
+    plt.figure(figsize=(8, 5))
+    ordre = 2 if caracteristique == 'age' else 1
+    sns.regplot(x=voitures[caracteristique], y=voitures['prix'], order=ordre,
+                scatter_kws={'alpha': 0.4, 'color': 'steelblue'},
+                line_kws={'color': 'darkorange', 'linewidth': 3})
+    if caracteristique == 'age':
+        plt.title("Prix selon l'âge du véhicule (régression polynomiale)", fontsize=14)
+    else:
+        plt.title(f"Prix selon {caracteristique}", fontsize=14)
+    plt.xlabel(caracteristique)
+    plt.ylabel("Prix")
+    plt.show()
+
+voitures['age_carre'] = voitures['age'] ** 2
+voitures['cylindree_sur_age'] = voitures['cylindree'] / (voitures['age'] + 1)
+voitures['km_fois_age'] = voitures['kilometrage'] * voitures['age']
+voitures['mpg_sur_age'] = voitures['mpg'] / (voitures['age'] + 1)
+voitures['cylindree_fois_age'] = voitures['cylindree'] * voitures['age']
+
+numeriques_base = ['age', 'kilometrage', 'cylindree', 'mpg']
+candidates = ['age_carre', 'cylindree_sur_age', 'km_fois_age', 'mpg_sur_age', 'cylindree_fois_age']
+
+dummies = pd.get_dummies(voitures[['transmission', 'type_carburant']], drop_first=True)
+y = voitures['prix']
+
+
+def r2_moyen(colonnes_num):
+    X = pd.concat([voitures[colonnes_num], dummies], axis=1)
+    return cross_val_score(LinearRegression(), X, y, cv=5, scoring='r2').mean()
+
+
+r2_base = r2_moyen(numeriques_base)
+print("\nR² du modèle de base (régression multiple) :", round(r2_base, 4))
+
+print("\nR² univarié (prix expliqué par une seule variable) :")
+for feature in numeriques_base + candidates:
+    score = cross_val_score(LinearRegression(), voitures[[feature]], y, cv=5, scoring='r2').mean()
+    print(f"  {feature:20s} : {round(score, 4)}")
+
+print("\nGain quand on ajoute une feature au modèle de base :")
+resultats = {}
+for feature in candidates:
+    r2 = r2_moyen(numeriques_base + [feature])
+    resultats[feature] = r2
+    print(f"  + {feature:20s} : R² = {round(r2, 4)}  (gain {round(r2 - r2_base, 4)})")
+
+meilleure = max(resultats, key=resultats.get)
+print("\nMeilleure feature retenue :", meilleure, "-> R² =", round(resultats[meilleure], 4))
+
+colonnes_finales = numeriques_base + [meilleure]
+X = pd.concat([voitures[colonnes_finales], dummies], axis=1)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+modele_regression = LinearRegression().fit(X_train, y_train)
+
+df_coefficients = pd.DataFrame({'Variable': X.columns, 'Coefficient': modele_regression.coef_})
+df_coefficients = df_coefficients.sort_values(by='Coefficient', key=abs, ascending=False)
+print("\nCoefficients de la régression :")
+print(df_coefficients)
+
+plt.figure(figsize=(8, 6))
+sns.barplot(data=df_coefficients, x='Coefficient', y='Variable', palette='viridis')
+plt.title("Coefficients de la régression", fontsize=14)
+plt.xlabel("Valeur du coefficient")
+plt.ylabel("Variable")
+plt.tight_layout()
+plt.show()
+
+predictions = modele_regression.predict(X_test)
+print("\nModèle final (régression multiple) avec", meilleure)
+print("R²   :", round(r2_score(y_test, predictions), 3))
+print("RMSE :", round(mean_squared_error(y_test, predictions) ** 0.5, 2))
+print("MAE  :", round(mean_absolute_error(y_test, predictions), 2))
+
+scores_cv = cross_val_score(LinearRegression(), X, y, cv=5, scoring='r2')
+print("R² par pli (validation croisée 5-fold) :", np.round(scores_cv, 3))
+print("R² moyen :", round(scores_cv.mean(), 3), "écart-type :", round(scores_cv.std(), 3))
+
+plt.figure(figsize=(8, 6))
+plt.scatter(y_test, predictions, alpha=0.5, color='royalblue')
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()],
+         color='crimson', linewidth=3, linestyle='--')
+plt.xlabel("Prix réel")
+plt.ylabel("Prix prédit")
+plt.title("Validation du modèle : prix réel contre prix prédit", fontsize=14)
+plt.tight_layout()
+plt.show()
